@@ -1,0 +1,8 @@
+name: Run name
+run_name: Run by @${{ github.actor }}
+on: push
+jobs:
+  print:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Hello, ${{ github.actor }}"
