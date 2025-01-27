@@ -12,6 +12,7 @@ func TestEvenOrOdd(t *testing.T) {
 		{"Odd", 3, "Odd"},
 		{"Even", 4, "Even"},
 		{"Odd", 5, "Odd"},
+		{"Even", 6, "Even"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
