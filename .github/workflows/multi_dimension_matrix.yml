@@ -1,0 +1,14 @@
+name: Multi-dimension matrix
+on: push
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [10, 12, 14]
+    runs-on: ${{ matrix.os }}
+    steps:
+        - uses: actions/setup-node@v4
+          with:
+            node-version: ${{ matrix.node }}
+        - run: echo "OS: ${{ matrix.os }}, Node: ${{ matrix.node }}"
