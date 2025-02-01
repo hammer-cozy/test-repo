@@ -8,7 +8,7 @@ jobs:
         node: [10, 12, 14]
     runs-on: ${{ matrix.os }}
     steps:
-        - uses: actions/setup-node@v4
-          with:
-            node-version: ${{ matrix.node }}
-        - run: echo "OS: ${{ matrix.os }}, Node: ${{ matrix.node }}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: echo "${RUNNER_OS}" && node --version
