@@ -4,7 +4,7 @@ jobs:
   dump:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checcout@v4
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/dump/
         id: dump
         with:
