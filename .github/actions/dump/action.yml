@@ -1,0 +1,26 @@
+name: Dump
+description: |
+  This workflow dumps the GitHub context.
+  It is useful for debugging and understanding the GitHub context.
+inputs:
+  enable-context:
+    default: 'true'
+    required: false
+    description: "Enable log output"
+outputs:
+  dumped-date:
+    value: ${{ steps.current.outputs.date}}
+    description: "The date when the context was dumped"
+runs:
+  using: composite
+  steps:
+    - run: printenv | sort
+      shell: bash
+    - run: echo "${CONTEXT}"
+      if: ${{ inputs.enable-context == 'true' }}
+      env:
+        CONTEXT: ${{ toJson(github) }}
+      shell: bash
+    - id: current
+      run: echo "date-$(date)" >> "{GITHUB_OUTPUT}"
+      shell: bash
