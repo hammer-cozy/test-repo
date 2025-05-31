@@ -77,6 +77,58 @@ void my_callback_function(void *result, int error_code);
 -   The callback is invoked by the async task after the `operation` function has run and after the `status` (and potentially `result` and `error_code`) have been set by the `operation` itself.
 -   It is executed in the context of the async task.
 
+#### Acting on Completion in Requester Task Context
+
+While the callback function is essential for knowing when an operation has finished and what its outcome is, it's important to remember that **the callback function executes in the context of the internal asynchronous processing task, not the original requester task.**
+
+If the requester task needs to perform specific actions based on the operation's outcome (e.g., update its own state, interact with peripherals it controls, call UI functions), it typically should not perform these directly within the callback if they are lengthy, might block, or require access to the requester's specific task context. Doing so can stall the processing of other asynchronous operations.
+
+The common pattern is to use the callback to send a message or signal back to the original requester task using a FreeRTOS Inter-Process Communication (IPC) mechanism. The requester task would then wait for this IPC to act.
+
+**Pattern:**
+
+1.  **Requester Task Prepares IPC:**
+    *   Before submitting the asynchronous operation, the requester task creates an IPC primitive (e.g., a FreeRTOS queue, event group, or semaphore). For task notifications, it would get its own task handle.
+2.  **Pass IPC Handle via `user_data`:**
+    *   The handle for this IPC primitive is passed to the `async_op_t` structure's `user_data` field.
+3.  **Callback Sends Notification:**
+    *   Inside the callback function, it retrieves the IPC handle from the `user_data` field.
+    *   It then uses the appropriate FreeRTOS API to send the result, error code, or a simple signal to the requester task via this IPC (e.g., `xQueueSendToBack()`, `xEventGroupSetBits()`, `xSemaphoreGive()`, `xTaskNotifyGive()`). This should be a non-blocking send if possible to avoid stalling the async task.
+4.  **Requester Task Waits:**
+    *   After submitting the `async_op_t`, the requester task typically waits (pends) on the IPC primitive (e.g., `xQueueReceive()`, `xEventGroupWaitBits()`, `xSemaphoreTake()`, `ulTaskNotifyTake()`).
+5.  **Process in Requester Context:**
+    *   When the callback sends the notification, the requester task unblocks and can now safely process the operation's outcome and perform any necessary actions within its own task context.
+
+**Benefits:**
+
+*   **Keeps Callbacks Short & Non-Blocking:** Ensures the asynchronous processing task remains responsive.
+*   **Clean Context Separation:** Allows the requester task to handle results within its own control flow and using its own resources.
+
+**Conceptual Example (using a Queue):**
+
+```c
+// In the requester task:
+QueueHandle_t result_queue = xQueueCreate(1, sizeof(my_result_struct_t));
+async_op.user_data = result_queue; // Pass queue handle to callback
+async_op.callback = my_op_callback;
+// ... submit op ...
+
+my_result_struct_t operation_outcome;
+if (xQueueReceive(result_queue, &operation_outcome, portMAX_DELAY) == pdPASS) {
+    // Now in requester task's context, process operation_outcome
+}
+
+// In the callback function (runs in async task context):
+void my_op_callback(void* result, int error_code, void* user_data) { // Assuming user_data is passed
+    QueueHandle_t q = (QueueHandle_t)user_data;
+    my_result_struct_t outcome;
+    outcome.res_data = result; // Be careful with pointer validity here
+    outcome.err = error_code;
+    xQueueSendToBack(q, &outcome, 0); // Send to requester's queue
+}
+```
+This pattern is highly recommended for robust application design when actions in the requester's context are needed post-completion.
+
 ## Operation Function Responsibilities
 
 The function assigned to `op->operation` is responsible for:
