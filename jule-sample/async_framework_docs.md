@@ -89,3 +89,42 @@ The function assigned to `op->operation` is responsible for:
 6.  **Timeout Management (Optional)**: If the operation needs to support a timeout, it should use `op->op_timeout_ticks` to manage this internally. The framework does not automatically terminate operations.
 
 This design ensures that the state of the operation is correctly updated before the callback (if any) is invoked.
+
+## Thread Safety Considerations
+
+It's crucial to understand the thread safety aspects when using this asynchronous framework in a multi-tasking FreeRTOS environment.
+
+**FreeRTOS Queue Operations:**
+
+The underlying FreeRTOS queue functions used by this framework (`xQueueSendToBack` and `xQueueReceive`) are designed to be thread-safe by FreeRTOS. This means that the act of enqueuing or dequeuing an `async_op_t*` is protected against race conditions from multiple tasks interacting with the queue. You do **not** need to wrap calls to `async_submit_operation()` or the internal queue receive operations with your own mutexes for the queue access itself.
+
+**Lifecycle of `async_op_t` Instances:**
+
+The primary responsibility for managing the memory and concurrent access of the `async_op_t` structure itself lies with the user of the framework.
+
+*   **Stack Allocation (as in `async_example.c`):**
+    *   If an `async_op_t` instance is allocated on a task's stack, it's generally safe for a single submission.
+    *   Once `async_submit_operation()` is called, the submitting task should consider the ownership of the `async_op_t` instance (and its pointed-to `params`) transferred to the async framework until the callback is invoked.
+    *   Modifying the `async_op_t` instance or its `params` from the submitting task *after* submission and *before* or *during* the callback execution can lead to race conditions and unpredictable behavior.
+    *   The `async_op_t` instance on the stack will only be valid as long as the task that allocated it remains in scope and its stack frame is valid. Ensure the callback completes and any necessary data is copied before the stack-allocated `async_op_t` goes out of scope.
+
+*   **Dynamic Allocation:**
+    *   If `async_op_t` instances are dynamically allocated (e.g., using `pvPortMalloc()`), the application is responsible for both allocation and deallocation.
+    *   A common pattern is for the submitting task to allocate the `async_op_t` and then for the callback function (or the submitting task after being signaled by the callback) to deallocate it.
+    *   If the `async_op_t` structure or its members need to be accessed by multiple tasks outside of the framework's direct control, appropriate mutexes or other synchronization mechanisms must be used.
+
+**Data Pointed to by `op->params` and `op->result`:**
+
+*   This framework does **not** provide any intrinsic thread safety for the data that `op->params` or `op->result` point to.
+*   If these pointers reference data that is shared between multiple tasks (e.g., global variables, shared buffers), your application code must implement proper synchronization (e.g., mutexes, semaphores) to protect accesses to this data.
+
+**Thread Safety within the `op->operation` Function:**
+
+*   The `operation` function provided within the `async_op_t` structure executes in the context of the asynchronous task (`prv_async_task_handler`).
+*   This function must be written to be thread-safe if it accesses any resources shared with other tasks or interrupt service routines. This includes:
+    *   Accessing global variables.
+    *   Accessing hardware peripherals.
+    *   Calling non-reentrant functions.
+*   Use appropriate synchronization primitives (mutexes, critical sections) within your `operation` function as needed.
+
+By being mindful of these considerations, you can effectively use the asynchronous framework in a robust and thread-safe manner.
